@@ -3,6 +3,7 @@ import contextvars
 import io
 import json
 import re
+import sys
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -102,16 +103,28 @@ def setup_logger(
             "<level>{message}</level>" + extra_str + "\n"
         )
 
-    # Use an encoding-aware stdout sink so Unicode characters (e.g. Russian text)
-    # don't cause UnicodeEncodeError on Windows where the console encoding is
-    # often cp1251 or ASCII instead of UTF-8.  Passing the string "sys.stdout"
-    # lets Loguru open it with explicit UTF-8 encoding.
+    # Wrap stdout to force UTF-8 encoding for loguru.  Loguru reads the sink's
+    # .encoding attribute (line 819 of _logger.py) to decide how to encode
+    # Unicode log messages.  On Windows sys.stdout.encoding is often "ascii"
+    # or "cp1251", which causes UnicodeEncodeError for Russian text in messages.
+    class _Utf8Stdout:
+        """Thin shim that presents as a UTF-8 text stream."""
+        encoding = "utf-8"
+        name = "<stdout>"
+
+        @staticmethod
+        def write(data: str) -> int:
+            return sys.stdout.buffer.write(data.encode("utf-8", errors="replace"))
+
+        @staticmethod
+        def flush() -> None:
+            sys.stdout.buffer.flush()
+
     logger.add(
-        "sys.stdout",
+        _Utf8Stdout(),
         level=log_level,
         format=_format,
         enqueue=True,
-        encoding="utf-8",
     )
 
     logger.add(
