@@ -1,8 +1,8 @@
 # logger.py
 import contextvars
+import io
 import json
 import re
-import sys
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -102,11 +102,16 @@ def setup_logger(
             "<level>{message}</level>" + extra_str + "\n"
         )
 
+    # Use an encoding-aware stdout sink so Unicode characters (e.g. Russian text)
+    # don't cause UnicodeEncodeError on Windows where the console encoding is
+    # often cp1251 or ASCII instead of UTF-8.  Passing the string "sys.stdout"
+    # lets Loguru open it with explicit UTF-8 encoding.
     logger.add(
-        sys.stdout,
+        "sys.stdout",
         level=log_level,
         format=_format,
         enqueue=True,
+        encoding="utf-8",
     )
 
     logger.add(
@@ -116,6 +121,7 @@ def setup_logger(
         retention="7 days",
         enqueue=True,
         format=_format,
+        encoding="utf-8",
     )
 
     _do_redact = enable_redaction
