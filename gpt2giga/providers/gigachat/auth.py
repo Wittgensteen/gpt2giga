@@ -6,7 +6,10 @@ from gigachat import GigaChat
 from gigachat.settings import SCOPE
 
 from gpt2giga.constants import _AUTH_KEYS
-from gpt2giga.providers.gigachat.client import create_gigachat_client
+from gpt2giga.providers.gigachat.client import (
+    _inject_custom_headers,
+    create_gigachat_client,
+)
 
 
 def pass_token_to_gigachat(gigachat_client: GigaChat, token: str) -> GigaChat:
@@ -19,10 +22,19 @@ def pass_token_to_gigachat(gigachat_client: GigaChat, token: str) -> GigaChat:
         gigachat_client._settings.user = user
         gigachat_client._settings.password = password
     elif token.startswith("giga-cred-"):
-        parts = token.replace("giga-cred-", "", 1).split(":")
+        parts = token.replace("giga-cred-", "", 1).split(
+            ":"
+        )
         gigachat_client._settings.credentials = parts[0]
         gigachat_client._settings.scope = parts[1] if len(parts) > 1 else SCOPE
     return gigachat_client
+
+
+def _apply_custom_headers(client: GigaChat) -> GigaChat:
+    """Ensure custom identification headers are present on the underlying httpx clients."""
+    _inject_custom_headers(client._client)
+    _inject_custom_headers(getattr(client, "_aclient", None))
+    return client
 
 
 def create_gigachat_client_for_request(settings: Any, token: str) -> GigaChat:
@@ -37,6 +49,7 @@ def create_gigachat_client_for_request(settings: Any, token: str) -> GigaChat:
         for key in _AUTH_KEYS:
             kwargs.pop(key, None)
         kwargs["access_token"] = token.replace("giga-auth-", "", 1)
-        return GigaChat(**kwargs)
+        client = GigaChat(**kwargs)
+        return _apply_custom_headers(client)
     gigachat_client = create_gigachat_client(settings)
     return pass_token_to_gigachat(gigachat_client, token)
